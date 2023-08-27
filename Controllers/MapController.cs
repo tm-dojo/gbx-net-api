@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using GBX.NET;
 using GBX.NET.Engines.Game;
 using GbxNetApi.Classes;
 using System.Text.Json;
+using Amazon.S3.Model;
+using System.Text.Json.Serialization;
 
 namespace GbxNetApi.Controllers
 {
@@ -11,13 +12,30 @@ namespace GbxNetApi.Controllers
     [ApiController]
     public class MapController : ControllerBase
     {
-        [HttpPost("blocks")]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(MapBlocksData))]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public IActionResult ProcessMap(IFormFile file)
+        private readonly IConfiguration _configuration;
+
+        public MapController(IConfiguration configuration)
         {
+            _configuration = configuration;
+        }
+
+        private async Task<MapBlocksData> ExtractBlocksFromMapUid(string mapUid)
+        {
+            List<string> blackListedBlocks = new List<string>()
+            {
+                "VoidBlock1x1",
+                "Misc\\VoidFull.Block.Gbx_CustomBlock",
+                "Grass"
+            };
+
+            Stream stream = await NadeoService.GetMapFileStreamFromUrlAsync(mapUid);
+
+            // Load block offsets json file
+            string json = System.IO.File.ReadAllText("./AllBlockOffsets.json");
+
+            List<BlockOffset> allBlockOffsets = JsonSerializer.Deserialize<List<BlockOffset>>(json);
+
             // Open and parse map file
-            Stream stream = file.OpenReadStream();
             var node = GameBox.ParseNode(stream);
 
             if (node is CGameCtnChallenge map)
@@ -27,8 +45,9 @@ namespace GbxNetApi.Controllers
                 if (map.Blocks != null)
                 {
                     nadeoBlocks = map.Blocks
-                        .Where(block => block.Flags != -1)
-                        .Select(block => new NadeoBlock(block))
+                        .Where(block => block.Flags != -1 && !block.IsFree && !blackListedBlocks.Contains(block.Name))
+                        .Select(block => new NadeoBlock(block, allBlockOffsets))
+                        .Distinct()
                         .ToList();
                 }
 
@@ -37,20 +56,60 @@ namespace GbxNetApi.Controllers
                 if (map.AnchoredObjects != null)
                 {
                     anchoredObjects = map.AnchoredObjects
+                        .Where(block => !blackListedBlocks.Contains(block.ItemModel.Id))
                         .Select(anchoredObject => new AnchoredObject(anchoredObject))
+                        .Distinct()
                         .ToList();
                 }
 
-                // Store all map block data in order to return the data formatted nicely
+                List<FreeModeBlock> freeModeBlocks = new List<FreeModeBlock>();
+
+                freeModeBlocks = map.Blocks
+                    .Where(block => block.IsFree && !blackListedBlocks.Contains(block.Name))
+                    .Select(block => new FreeModeBlock(block))
+                    .ToList();
+
                 MapBlocksData mapBlocksData = new MapBlocksData(
-                    nadeoBlocks, 
-                    anchoredObjects
+                    nadeoBlocks,
+                    anchoredObjects,
+                    freeModeBlocks
                 );
 
-                return Ok(mapBlocksData);
-            } 
+                return mapBlocksData;
+            }
 
-            return BadRequest("The provided file was not able to be parsed as a 'CGameCtnChallenge', please provide a '.Map.Gbx' file.");
+            return null;
+        }
+
+        [HttpPost("blocks/{mapUid=mapUid}")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(MapBlocksData))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> GetMapBlocksAsync([FromHeader(Name = "secret")] string secret, string mapUid)
+        {
+            if (secret != _configuration.GetSection("MapBlocksSecret").Value) {
+                return Unauthorized("Invalid secret");
+            }
+
+            MapBlocksData mapBlocks = await S3.GetMapBlockFromS3(mapUid);
+
+            if (mapBlocks == null)
+            {
+                mapBlocks = await ExtractBlocksFromMapUid(mapUid);
+
+                if (mapBlocks != null)
+                {
+                    // Store result object in S3
+                    PutObjectResponse putObjectResponse = await S3.UploadBlocksJson(mapBlocks, mapUid);
+
+                    return Ok(mapBlocks);
+                }
+                else
+                {
+                    return BadRequest("Could not extract block informations");
+                }
+            }
+
+            return Ok(mapBlocks);
         }
     }
 }

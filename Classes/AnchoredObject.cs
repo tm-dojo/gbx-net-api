@@ -1,9 +1,13 @@
 ﻿using GBX.NET.Engines.Game;
+using System.Text.Json.Serialization;
 
 namespace GbxNetApi.Classes
 {
     public class AnchoredObject
     {
+        [JsonConstructor]
+        public AnchoredObject() { }
+
         public AnchoredObject(CGameCtnAnchoredObject anchoredObject)
         {
             name = anchoredObject.ItemModel.Id;

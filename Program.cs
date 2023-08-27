@@ -30,6 +30,16 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Init S3 for uploading generated json blocks files
+S3Credentials s3Credentials = new S3Credentials();
+app.Configuration.GetSection("S3").Bind(s3Credentials);
+S3.Init(s3Credentials);
+
+// Init Nadeo service for getting map informations
+NadeoAccount nadeoAccount = new NadeoAccount();
+app.Configuration.GetSection("NadeoAccount").Bind(nadeoAccount);
+NadeoService.Init(nadeoAccount);
+
 app.UseCors(MyAllowSpecificOrigins);
 
 app.UseHttpsRedirection();

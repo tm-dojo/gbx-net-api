@@ -3,6 +3,7 @@ using GBX.NET.Engines.Game;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.ObjectModel;
+using static GBX.NET.Engines.Game.CGameGhost.Data;
 
 namespace GbxNetApi.Controllers
 {
@@ -25,10 +26,10 @@ namespace GbxNetApi.Controllers
 
             if (node is CGameCtnGhost ghost)
             {
-                if (ghost.RecordData != null && ghost.RecordData.Samples != null)
+                if (ghost.RecordData != null && ghost.SampleData?.Samples != null)
                 {
-                    List<Sample> validSamples = ghost.RecordData.Samples
-                        .Where(sample => sample.Timestamp != null)
+                    List<Sample> validSamples = ghost.SampleData.Samples
+                        .Where(sample => sample?.Time != null)
                         .ToList();
 
                     // Write sample data to output stream
@@ -49,7 +50,7 @@ namespace GbxNetApi.Controllers
             foreach (Sample sample in samples)
             {
                 // Timestamp
-                writer.Write((int)sample.Timestamp.GetValueOrDefault().TotalMilliseconds);
+                writer.Write((int)sample.Time.TotalMilliseconds);
 
                 // Position
                 writer.Write((float)sample.Position.X);
@@ -62,7 +63,7 @@ namespace GbxNetApi.Controllers
                 writer.Write((float)sample.Velocity.Z);
 
                 // Speed
-                writer.Write((float)sample.Speed);
+                writer.Write((float)sample.VelocitySpeed);
 
                 // Steer
                 if (useExperimentalData)
