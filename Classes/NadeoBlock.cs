@@ -23,7 +23,7 @@ namespace GbxNetApi.Classes
 
             if (blockOffset != null)
             {
-                blockOffsets = blockOffset.blockOffsetsAir;
+                blockOffsets = block.IsGround ? blockOffset.blockOffsetsGround : blockOffset.blockOffsetsAir;
             }
             else
             {
@@ -35,8 +35,8 @@ namespace GbxNetApi.Classes
         }
 
         public string name { get; set; }
-        public int dir { get; set; }
         public List<float> pos { get; set; }
+        public int dir { get; set; }
         public List<List<float>> blockOffsets { get; set; }
     }
 }

@@ -13,8 +13,8 @@ namespace GbxNetApi.Classes
             this.freeModeBlocks = freeModeBlocks;
         }
 
-        public IList<AnchoredObject> anchoredObjects { get; set; }
-        public IList<FreeModeBlock> freeModeBlocks { get; set; }
         public IList<NadeoBlock> nadeoBlocks { get; set; }
+        public IList<FreeModeBlock> freeModeBlocks { get; set; }
+        public IList<AnchoredObject> anchoredObjects { get; set; }
     }
 }
