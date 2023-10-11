@@ -40,7 +40,10 @@ NadeoAccount nadeoAccount = new NadeoAccount();
 app.Configuration.GetSection("NadeoAccount").Bind(nadeoAccount);
 NadeoService.Init(nadeoAccount);
 
-app.UseCors(MyAllowSpecificOrigins);
+app.UseCors(x => x
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader());
 
 app.UseHttpsRedirection();
 

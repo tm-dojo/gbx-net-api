@@ -32,6 +32,7 @@ namespace GbxNetApi.Controllers
 
             // Load block offsets json file
             string json = System.IO.File.ReadAllText("./AllBlockOffsets.json");
+            string jsonPath = System.IO.Path.GetFullPath("./AllBlockOffsets.json");
 
             List<BlockOffset> allBlockOffsets = JsonSerializer.Deserialize<List<BlockOffset>>(json);
 
@@ -81,7 +82,64 @@ namespace GbxNetApi.Controllers
             return null;
         }
 
-        [HttpPost("blocks/{mapUid=mapUid}")]
+        [HttpPost("blocks")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(MapBlocksData))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public IActionResult ProcessMap(IFormFile file)
+        {
+            // Open and parse map file
+            Stream stream = file.OpenReadStream();
+            var node = GameBox.ParseNode(stream);
+
+            // Load block offsets json file
+            string json = System.IO.File.ReadAllText("./AllBlockOffsets.json");
+            string jsonPath = System.IO.Path.GetFullPath("./AllBlockOffsets.json");
+
+            List<BlockOffset> allBlockOffsets = JsonSerializer.Deserialize<List<BlockOffset>>(json);
+
+            if (node is CGameCtnChallenge map)
+            {
+                // Store regular NADEO blocks
+                List<NadeoBlock> nadeoBlocks = new List<NadeoBlock>();
+                if (map.Blocks != null)
+                {
+                    nadeoBlocks = map.Blocks
+                        .Where(block => block.Flags != -1 && !block.IsFree/* && !blackListedBlocks.Contains(block.Name)*/)
+                        .Select(block => new NadeoBlock(block, allBlockOffsets))
+                        .Distinct()
+                        .ToList();
+                }
+
+                // Store anchored objects
+                List<AnchoredObject> anchoredObjects = new List<AnchoredObject>();
+                if (map.AnchoredObjects != null)
+                {
+                    anchoredObjects = map.AnchoredObjects
+                        .Select(anchoredObject => new AnchoredObject(anchoredObject))
+                        .Distinct()
+                        .ToList();
+                }
+
+                List<FreeModeBlock> freeModeBlocks = new List<FreeModeBlock>();
+
+                freeModeBlocks = map.Blocks
+                    .Where(block => block.IsFree )
+                    .Select(block => new FreeModeBlock(block))
+                    .ToList();
+
+                MapBlocksData mapBlocksData = new MapBlocksData(
+                    nadeoBlocks,
+                    anchoredObjects,
+                    freeModeBlocks
+                );
+
+                return Ok(mapBlocksData);
+            }
+
+            return BadRequest("The provided file was not able to be parsed as a 'CGameCtnChallenge', please provide a '.Map.Gbx' file.");
+        }
+
+        [HttpGet("blocks/{mapUid=mapUid}")]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(MapBlocksData))]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> GetMapBlocksAsync([FromHeader(Name = "secret")] string secret, string mapUid)
@@ -90,16 +148,16 @@ namespace GbxNetApi.Controllers
                 return Unauthorized("Invalid secret");
             }
 
-            MapBlocksData mapBlocks = await S3.GetMapBlockFromS3(mapUid);
+            MapBlocksData mapBlocks = null;//await S3.GetMapBlockFromS3(mapUid);
 
-            if (mapBlocks == null)
+            if (mapBlocks == null || mapUid == "btmbJWADQOS20ginP9DJ0i8sh3f")
             {
                 mapBlocks = await ExtractBlocksFromMapUid(mapUid);
 
                 if (mapBlocks != null)
                 {
                     // Store result object in S3
-                    PutObjectResponse putObjectResponse = await S3.UploadBlocksJson(mapBlocks, mapUid);
+                    //PutObjectResponse putObjectResponse = await S3.UploadBlocksJson(mapBlocks, mapUid);
 
                     return Ok(mapBlocks);
                 }
